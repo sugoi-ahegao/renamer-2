@@ -12,3 +12,15 @@ Renamer-2 is built to improve upon [renamerOnUpdate](https://github.com/stashapp
 4. Add your own config by modifying [user_config.py](./src/user_config.py)
    1. Make sure you set `ENABLE_DRYRUN` to `True` to test your config before running it for real
    2. See the [user config demo](./src/user_config_demo.py) for examples of how to configure your own rules
+
+## Features Planned for Future Releases
+
+- [ ] Add support for configuring logging
+- [ ] Add support to configure the `ENABLE_RENAME_ON_UPDATE` flag from the Stash UI
+- [ ] Add support to configure the `ENABLE_DRYRUN` flag from the Stash UI
+- [ ] Add support for `FILE_NAME_CONFIG/POST_FILE_NAME_TEMPLATE_CONFIG` configuration
+- [ ] Add support for `FILE_DIR_CONFIG/POST_FILE_DIR_TEMPLATE_CONFIG` configuration
+- [ ] Add support for `TEMPLATE_VARIABLES_CONFIG/TITLE_CONFIG` configuration
+- [ ] Add support for `TEMPLATE_VARIABLES_CONFIG/STUDIO_CONFIG` configuration
+- [ ] Add support for `TEMPLATE_VARIABLES_CONFIG/TAGS_CONFIG` configuration
+- [ ] Add support for `ASSOCIATED_FILES` - to be able to rename associated files
