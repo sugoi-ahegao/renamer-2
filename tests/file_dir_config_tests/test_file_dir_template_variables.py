@@ -1,0 +1,272 @@
+import pytest
+from pytest_mock import MockerFixture
+from models.studio import Studio
+
+from test_utils.config_builder import ConfigBuilder
+from test_utils.helpers import run_renamer_with_mock
+from test_utils.scene_builder import SceneBuilder
+
+
+class TestFileDirTemplateVariables:
+    @pytest.fixture
+    def base_scene(self):
+        return {
+            "id": 1,
+            "title": "Scene Title",
+            "date": "2023-01-15",
+            "rating100": 100,
+            "studio": {"id": 1, "name": "Studio A"},
+            "code": "ABC-123",
+            "organized": False,
+            "performers": [
+                {
+                    "id": 1,
+                    "name": "Trinity St. Clair",
+                    "gender": "FEMALE",
+                    "favorite": False,
+                    "stash_ids": [
+                        {
+                            "endpoint": "http://localhost:9999/graphql",
+                            "stash_id": "performer_stash_id_1",
+                        }
+                    ],
+                },
+                {
+                    "id": 2,
+                    "name": "Gia Derza",
+                    "gender": "FEMALE",
+                    "favorite": False,
+                    "stash_ids": [
+                        {
+                            "endpoint": "http://localhost:9999/graphql",
+                            "stash_id": "performer_stash_id_2",
+                        }
+                    ],
+                },
+                {
+                    "id": 3,
+                    "name": "J Mac",
+                    "gender": "MALE",
+                    "favorite": False,
+                    "stash_ids": [
+                        {
+                            "endpoint": "http://localhost:9999/graphql",
+                            "stash_id": "performer_stash_id_3",
+                        }
+                    ],
+                },
+            ],
+            "tags": [
+                {
+                    "id": 1,
+                    "name": "Tag 1",
+                },
+                {"id": 2, "name": "Tag 2"},
+                {"id": 3, "name": "Tag 3"},
+            ],
+            "files": [
+                {
+                    "id": "1",
+                    "basename": "file1.mp4",
+                    "path": R"C:\Users\Desktop\file1.mp4",
+                    "width": "1920",
+                    "height": "1080",
+                    "video_codec": "h264",
+                    "audio_codec": "aac",
+                    "frame_rate": 30,
+                    "duration": 3030.56,
+                    "bit_rate": 6158790,
+                    "mod_time": "2022-11-29T23:54:07-07:00",
+                    "created_at": "2023-02-22T22:55:02-07:00",
+                    "updated_at": "2023-03-07T12:21:01-07:00",
+                    "parent_folder_id": "140",
+                    "fingerprints": [
+                        {"type": "oshash", "value": "file_oshash"},
+                        {"type": "phash", "value": "file_phash"},
+                    ],
+                }
+            ],
+            "movies": [
+                {
+                    "movie": {"id": 1, "name": "Movie A", "date": "2022-01-15"},
+                    "scene_index": 1,
+                }
+            ],
+            "stash_ids": [
+                {
+                    "endpoint": "http://localhost:9999/graphql",
+                    "stash_id": "scene_stash_id",
+                },
+            ],
+        }
+
+    @pytest.fixture
+    def base_config(self):
+        return ConfigBuilder().with_max_path_len(None).build_dict()
+
+    def test_template_with_all_template_variables(
+        self, base_scene: dict, base_config: dict, mocker: MockerFixture
+    ):
+        parent_studio = Studio(**{"id": 1, "name": "Parent Studio"})
+        child_studio = Studio(**{"id": 2, "name": "Child Studio"})
+
+        child_studio.parent_studio = parent_studio
+
+        studios = [parent_studio, child_studio]
+
+        scene = SceneBuilder(base_scene).with_studio(child_studio.dict()).build()
+
+        config = (
+            ConfigBuilder(base_config)
+            .with_file_name_templates([{"TEMPLATE": "{title}"}])
+            .with_file_dir_templates(
+                [
+                    {
+                        "TEMPLATE": R"C:\Users\Desktop\({title}) ({studio}) ({performers}) ({date}) ({resolution}) ({resolution_name}) ({duration}) ({bit_rate_mbps}) ({parent_studio}) ({studio_family}) ({rating}) ({tags}) ({video_codec}) ({audio_codec}) ({movie_scene_number}) ({movie_name}) ({movie_date}) ({scene_stash_id}) ({performers_stash_ids}) ({studio_code}) ({oshash}) ({phash})"
+                    }
+                ]
+            )
+            .build()
+        )
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+        assert (
+            renames[0]["dst"]
+            == R"C:\Users\Desktop\(Scene Title) (Child Studio) (Trinity St. Clair, Gia Derza, J Mac) (2023-01-15) (1080p) (FHD) (00.50.30) (6.16) (Parent Studio) (Parent Studio) (100) (Tag 1, Tag 2, Tag 3) (h264) (aac) (1) (Movie A) (2022-01-15) (scene_stash_id) (performer_stash_id_1, performer_stash_id_2, performer_stash_id_3) (ABC-123) (file_oshash) (file_phash)\Scene Title.mp4"
+        )
+
+    def test_template_with_formatting(
+        self, base_scene: dict, base_config: dict, mocker: MockerFixture
+    ):
+        scene = SceneBuilder(base_scene).build()
+
+        config = (
+            ConfigBuilder(base_config)
+            .with_file_name_templates([{"TEMPLATE": "{title}"}])
+            .with_file_dir_templates(
+                [
+                    {
+                        "TEMPLATE": R"C:\Users\Desktop\[{studio}] {date} {title} -- {performers} ({resolution})"
+                    }
+                ]
+            )
+            .build()
+        )
+
+        studios = [scene.studio] if scene.studio else []
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert (
+            renames[0]["dst"]
+            == R"C:\Users\Desktop\[Studio A] 2023-01-15 Scene Title -- Trinity St. Clair, Gia Derza, J Mac (1080p)\Scene Title.mp4"
+        )
+
+    def test_template_with_studio_hierarchy(
+        self, base_scene: dict, base_config: dict, mocker: MockerFixture
+    ):
+        studio_grandparent = Studio(**{"id": 1, "name": "Grandparent Studio"})
+        studio_parent = Studio(**{"id": 2, "name": "Parent Studio"})
+        studio_child = Studio(**{"id": 3, "name": "Child Studio"})
+        studio_random = Studio(**{"id": 4, "name": "Random Studio"})
+
+        studio_child.parent_studio = studio_parent
+        studio_parent.parent_studio = studio_grandparent
+
+        studios = [studio_grandparent, studio_parent, studio_child, studio_random]
+
+        config = (
+            ConfigBuilder(base_config)
+            .with_file_name_templates([{"TEMPLATE": "{title}"}])
+            .with_file_dir_templates(
+                [{"TEMPLATE": R"C:\Users\Desktop\{studio_hierarchy}"}]
+            )
+            .build()
+        )
+
+        # Case 1: studio hierarchy = Grandparent, Parent, Child
+        scene = SceneBuilder(base_scene).with_studio(studio_child.dict()).build()
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert (
+            renames[0]["dst"]
+            == R"C:\Users\Desktop\Grandparent Studio\Parent Studio\Child Studio\Scene Title.mp4"
+        )
+
+        # Case 2: studio hierarchy = Grandparent, Parent
+        scene = SceneBuilder(base_scene).with_studio(studio_parent.dict()).build()
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert (
+            renames[0]["dst"]
+            == R"C:\Users\Desktop\Grandparent Studio\Parent Studio\Scene Title.mp4"
+        )
+
+        # Case 3: studio hierarchy = Grandparent
+        scene = SceneBuilder(base_scene).with_studio(studio_grandparent.dict()).build()
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert (
+            renames[0]["dst"] == R"C:\Users\Desktop\Grandparent Studio\Scene Title.mp4"
+        )
+
+        # Case 4: studio hierarchy = Random
+        scene = SceneBuilder(base_scene).with_studio(studio_random.dict()).build()
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert renames[0]["dst"] == R"C:\Users\Desktop\Random Studio\Scene Title.mp4"
+
+        # Case 5: studio hierarchy = None
+        scene = SceneBuilder(base_scene).with_studio(None).build()
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert renames[0]["dst"] == R"C:\Users\Desktop\Scene Title.mp4"
+
+    def test_template_with_src_variable(
+        self, base_scene: dict, base_config: dict, mocker: MockerFixture
+    ):
+        scene = SceneBuilder(base_scene).build()
+
+        config = (
+            ConfigBuilder(base_config)
+            .with_file_name_templates([{"TEMPLATE": "{title}"}])
+            .with_file_dir_templates([{"TEMPLATE": R"{src}\Test"}])
+            .build()
+        )
+
+        studios = [scene.studio] if scene.studio else []
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert renames[0]["dst"] == R"C:\Users\Desktop\Test\Scene Title.mp4"
+
+    def test_template_going_up_directory(
+        self, base_scene: dict, base_config: dict, mocker: MockerFixture
+    ):
+        scene = SceneBuilder(base_scene).build()
+
+        config = (
+            ConfigBuilder(base_config)
+            .with_file_name_templates([{"TEMPLATE": "{title}"}])
+            .with_file_dir_templates([{"TEMPLATE": R"{src}\..\Test"}])
+            .build()
+        )
+
+        studios = [scene.studio] if scene.studio else []
+
+        renames = run_renamer_with_mock(mocker, config, [scene], studios)
+
+        assert len(renames) == 1
+        assert renames[0]["dst"] == R"C:\Users\Test\Scene Title.mp4"

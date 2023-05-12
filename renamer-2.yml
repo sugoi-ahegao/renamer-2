@@ -1,0 +1,18 @@
+name: Renamer 2
+description: Renamer But Better
+url: https://github.com/stashapp/CommunityScripts
+version: 0.0.1
+exec:
+  - python
+  - "{pluginDir}/src/main.py"
+interface: raw
+hooks:
+  - name: hook_rename
+    description: Rename/move file when you update a scene.
+    triggeredBy:
+      - Scene.Update.Post
+tasks:
+  - name: "Run"
+    description: "Run"
+    defaultArgs:
+      mode: "all_scenes"
